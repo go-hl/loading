@@ -39,8 +39,9 @@ func NewBar(steps int64) *Bar {
 func (b *Bar) termSizeUpdate() {
 	fileDescriptor := int(os.Stdin.Fd())
 	cols, rows, err := term.GetSize(fileDescriptor)
-	if err != nil {
-		log.Println("error geting terminal size:", err)
+	if err == nil {
+		atomic.SwapInt64(&b.termCols, 0)
+		atomic.SwapInt64(&b.termRows, 0)
 		return
 	}
 
