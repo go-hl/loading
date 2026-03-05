@@ -31,7 +31,7 @@ func NewBar(steps int64) *Bar {
 	return &Bar{
 		stepsTotal: steps,
 		stepsCount: 1,
-		check:      make(chan int, 1),
+		check:      make(chan int, steps),
 		done:       make(chan struct{}, 1),
 	}
 }
@@ -50,8 +50,7 @@ func (b *Bar) termSizeUpdate() {
 
 func (b *Bar) percentage() int {
 	count := int(atomic.LoadInt64(&b.stepsCount))
-	total := int(atomic.LoadInt64(&b.stepsTotal))
-	percentage := (count * 100) / total
+	percentage := (count * 100) / int(b.stepsTotal)
 	overflow := percentage > 100
 
 	if overflow {
@@ -64,8 +63,7 @@ func (b *Bar) percentage() int {
 
 func (b *Bar) print() {
 	count := int(atomic.LoadInt64(&b.stepsCount))
-	total := int(atomic.LoadInt64(&b.stepsTotal))
-	length := len(strconv.Itoa(total))
+	length := len(strconv.Itoa(int(b.stepsTotal)))
 	marker := strings.Repeat("0", length)
 	layout := len(fmt.Sprintf("[] %s/%s 000%%", marker, marker))
 
@@ -76,12 +74,12 @@ func (b *Bar) print() {
 	fmt.Printf(
 		"[%s%s] %*d/%*d %3d%%",
 		strings.Repeat("#", repeat), strings.Repeat(".", chars-repeat),
-		length, count, length, total, b.percentage(),
+		length, count, length, b.stepsTotal, b.percentage(),
 	)
 }
 
 func (*Bar) clear() {
-	time.Sleep(time.Millisecond * 500)
+	time.Sleep(time.Second)
 	ansiClearNexts()
 }
 
@@ -95,6 +93,7 @@ func (b *Bar) draw() {
 	ansiClearNexts()
 
 	ansiCursorEnd(b)
+	ansiClearLine()
 	b.print()
 
 	ansiCursorRestore()
@@ -111,6 +110,7 @@ func (b *Bar) Step(count int) {
 		select {
 		case b.check <- count:
 		default:
+			log.Println("missing step", atomic.LoadInt64(&b.stepsCount))
 		}
 	}
 }
@@ -131,19 +131,16 @@ func (b *Bar) Render() context.CancelFunc {
 			}
 			select {
 			case <-ctx.Done():
-				ansiCursorRestore()
-				ansiClearNexts()
+				b.clear()
 				b.quit.Store(true)
 			case count := <-b.check:
 				stepsCount := atomic.LoadInt64(&b.stepsCount)
-				stepsTotal := atomic.LoadInt64(&b.stepsTotal)
-				finished := stepsCount >= stepsTotal
+				finished := stepsCount >= b.stepsTotal
 
 				b.draw()
 				if finished {
 					b.clear()
 					b.quit.Store(true)
-					break
 				}
 
 				atomic.AddInt64(&b.stepsCount, int64(count))

@@ -30,6 +30,10 @@ func ansiCursorRestore() {
 	fmt.Print(ansiESC + "8") // restore cursor to saved position
 }
 
+func ansiClearLine() {
+	fmt.Print(ansiCSI + "2K") // clear cursor current line
+}
+
 func ansiClearNexts() {
 	fmt.Print(ansiCSI + "J") // clear from cursor all next lines
 }
