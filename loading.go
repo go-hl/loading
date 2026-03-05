@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -12,12 +13,8 @@ import (
 	"golang.org/x/term"
 )
 
-const (
-	ansiESC = "\x1B"
-	ansiCSI = ansiESC + "["
-)
-
-type bar struct {
+// Bar represents a progress bar.
+type Bar struct {
 	stepsTotal int64
 	stepsCount int64
 
@@ -29,8 +26,9 @@ type bar struct {
 	done  chan struct{}
 }
 
-func NewBar(steps int64) *bar {
-	return &bar{
+// NewBar creates a new [Bar].
+func NewBar(steps int64) *Bar {
+	return &Bar{
 		stepsTotal: steps,
 		stepsCount: 1,
 		check:      make(chan int, 1),
@@ -38,17 +36,7 @@ func NewBar(steps int64) *bar {
 	}
 }
 
-func (b *bar) print() {
-	const layout = len("[] 000%")
-
-	cols := int(atomic.LoadInt64(&b.termCols))
-	chars := map[bool]int{true: cols - layout}[cols >= layout]
-	repeat := (chars * b.percentage()) / 100
-
-	fmt.Printf("[%s%s] %3d%%", strings.Repeat("#", repeat), strings.Repeat(".", chars-repeat), b.percentage())
-}
-
-func (b *bar) termSizeUpdate() {
+func (b *Bar) termSizeUpdate() {
 	fileDescriptor := int(os.Stdin.Fd())
 	cols, rows, err := term.GetSize(fileDescriptor)
 	if err != nil {
@@ -60,7 +48,7 @@ func (b *bar) termSizeUpdate() {
 	atomic.SwapInt64(&b.termRows, int64(rows))
 }
 
-func (b *bar) percentage() int {
+func (b *Bar) percentage() int {
 	count := int(atomic.LoadInt64(&b.stepsCount))
 	total := int(atomic.LoadInt64(&b.stepsTotal))
 	percentage := (count * 100) / total
@@ -74,12 +62,30 @@ func (b *bar) percentage() int {
 	return percentage
 }
 
-func (*bar) clear() {
+func (b *Bar) print() {
+	count := int(atomic.LoadInt64(&b.stepsCount))
+	total := int(atomic.LoadInt64(&b.stepsTotal))
+	length := len(strconv.Itoa(total))
+	marker := strings.Repeat("0", length)
+	layout := len(fmt.Sprintf("[] %s/%s 000%%", marker, marker))
+
+	cols := int(atomic.LoadInt64(&b.termCols))
+	chars := map[bool]int{true: cols - layout}[cols >= layout]
+	repeat := (chars * b.percentage()) / 100
+
+	fmt.Printf(
+		"[%s%s] %*d/%*d %3d%%",
+		strings.Repeat("#", repeat), strings.Repeat(".", chars-repeat),
+		length, count, length, total, b.percentage(),
+	)
+}
+
+func (*Bar) clear() {
 	time.Sleep(time.Millisecond * 500)
 	ansiClearNexts()
 }
 
-func (b *bar) draw() {
+func (b *Bar) draw() {
 	b.termSizeUpdate()
 
 	ansiNewLine()
@@ -94,11 +100,13 @@ func (b *bar) draw() {
 	ansiCursorRestore()
 }
 
-func (b *bar) Done() {
+// Done simples call this after call [Bar.Render] to wait [Bar] completion.
+func (b *Bar) Done() {
 	<-b.done
 }
 
-func (b *bar) Step(count int) {
+// Step receives the count of steps to progress, one or more per time.
+func (b *Bar) Step(count int) {
 	if !b.quit.Load() {
 		select {
 		case b.check <- count:
@@ -107,7 +115,10 @@ func (b *bar) Step(count int) {
 	}
 }
 
-func (b *bar) Render() context.CancelFunc {
+// Render stats the progress bar showing.
+// It is finishd when the count of steps the greater than or equal the total.
+// Also can fast cancel with cancel function return value.
+func (b *Bar) Render() context.CancelFunc {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
@@ -141,28 +152,4 @@ func (b *bar) Render() context.CancelFunc {
 	}()
 
 	return cancel
-}
-
-func ansiNewLine() {
-	fmt.Print("\n") // create new line
-}
-
-func ansiCursorUp() {
-	fmt.Print(ansiCSI + "A") // move cursor up
-}
-
-func ansiCursorEnd(b *bar) {
-	fmt.Printf(ansiCSI+"%d;H", atomic.LoadInt64(&b.termRows)) // move cursor to down
-}
-
-func ansiCursorSave() {
-	fmt.Print(ansiESC + "7") // save current cursor position
-}
-
-func ansiCursorRestore() {
-	fmt.Print(ansiESC + "8") // restore cursor to saved position
-}
-
-func ansiClearNexts() {
-	fmt.Print(ansiCSI + "J") // clear from cursor all next lines
 }
