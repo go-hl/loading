@@ -55,7 +55,7 @@ func (b *Bar) percentage() int {
 	overflow := percentage > 100
 
 	if overflow {
-		b.quit.Store(true)
+		b.stop()
 		return 100
 	}
 
@@ -100,6 +100,10 @@ func (b *Bar) draw() {
 	ansiCursorRestore()
 }
 
+func (b *Bar) stop() {
+	b.quit.Store(true)
+}
+
 // Done simples call this after call [Bar.Render] to wait [Bar] completion.
 func (b *Bar) Done() {
 	<-b.done
@@ -133,7 +137,7 @@ func (b *Bar) Render() context.CancelFunc {
 			select {
 			case <-ctx.Done():
 				b.clear()
-				b.quit.Store(true)
+				b.stop()
 			case count := <-b.check:
 				stepsCount := atomic.LoadInt64(&b.stepsCount)
 				finished := stepsCount >= b.stepsTotal
@@ -141,7 +145,7 @@ func (b *Bar) Render() context.CancelFunc {
 				b.draw()
 				if finished {
 					b.clear()
-					b.quit.Store(true)
+					b.stop()
 				}
 
 				atomic.AddInt64(&b.stepsCount, int64(count))
