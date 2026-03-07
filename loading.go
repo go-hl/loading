@@ -30,7 +30,6 @@ type Bar struct {
 func NewBar(steps int64) *Bar {
 	return &Bar{
 		stepsTotal: steps,
-		stepsCount: 1,
 		check:      make(chan int, steps),
 		done:       make(chan struct{}, 1),
 	}
@@ -126,6 +125,7 @@ func (b *Bar) Step(count int) {
 func (b *Bar) Render() context.CancelFunc {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	b.draw()
 	go func() {
 		for {
 			if b.quit.Load() {
@@ -134,11 +134,14 @@ func (b *Bar) Render() context.CancelFunc {
 				close(b.done)
 				return
 			}
+
 			select {
 			case <-ctx.Done():
 				b.clear()
 				b.stop()
 			case count := <-b.check:
+				atomic.AddInt64(&b.stepsCount, int64(count))
+
 				stepsCount := atomic.LoadInt64(&b.stepsCount)
 				finished := stepsCount >= b.stepsTotal
 
@@ -147,8 +150,6 @@ func (b *Bar) Render() context.CancelFunc {
 					b.clear()
 					b.stop()
 				}
-
-				atomic.AddInt64(&b.stepsCount, int64(count))
 			}
 		}
 	}()
