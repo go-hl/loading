@@ -91,8 +91,10 @@ func (b *Bar) clear() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	ansiCursorSave(b.out)
 	ansiCursorEnd(b.out, b)
 	ansiClearLine(b.out)
+	ansiCursorRestore(b.out)
 }
 
 func (b *Bar) print(w io.Writer) {
