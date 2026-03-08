@@ -12,7 +12,7 @@ const (
 )
 
 func ansiCursorEnd(w io.Writer, b *Bar) {
-	fmt.Fprintf(w, ansiCSI+"%d;H", atomic.LoadInt64(&b.termRows)) // move cursor to down
+	fmt.Fprintf(w, ansiCSI+"%d;H", atomic.LoadInt64(&b.rows)) // move cursor to down
 }
 
 func ansiCursorSave(w io.Writer) {

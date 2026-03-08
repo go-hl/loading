@@ -18,11 +18,11 @@ import (
 
 // Bar represents a progress bar.
 type Bar struct {
-	stepsTotal int64
-	stepsCount int64
+	total  int64
+	acount int64
 
-	termCols int64
-	termRows int64
+	cols int64
+	rows int64
 
 	quit  atomic.Bool
 	check chan int
@@ -42,12 +42,12 @@ func NewBar(steps int64) *Bar {
 	layout := len(fmt.Sprintf("000%% [] %s/%s", marker, marker))
 
 	return &Bar{
-		stepsTotal: steps,
-		check:      make(chan int, steps),
-		done:       make(chan struct{}, 1),
-		out:        os.Stdout,
-		length:     length,
-		layout:     layout,
+		total:  steps,
+		check:  make(chan int, steps),
+		done:   make(chan struct{}, 1),
+		out:    os.Stdout,
+		length: length,
+		layout: layout,
 	}
 }
 
@@ -55,18 +55,18 @@ func (b *Bar) termSizeUpdate() {
 	fileDescriptor := int(os.Stdin.Fd())
 	cols, rows, err := term.GetSize(fileDescriptor)
 	if err != nil {
-		atomic.SwapInt64(&b.termCols, 0)
-		atomic.SwapInt64(&b.termRows, 0)
+		atomic.SwapInt64(&b.cols, 0)
+		atomic.SwapInt64(&b.rows, 0)
 		return
 	}
 
-	atomic.SwapInt64(&b.termCols, int64(cols))
-	atomic.SwapInt64(&b.termRows, int64(rows))
+	atomic.SwapInt64(&b.cols, int64(cols))
+	atomic.SwapInt64(&b.rows, int64(rows))
 }
 
 func (b *Bar) percentage() int {
-	count := int(atomic.LoadInt64(&b.stepsCount))
-	percentage := (count * 100) / int(b.stepsTotal)
+	count := int(atomic.LoadInt64(&b.acount))
+	percentage := (count * 100) / int(b.total)
 
 	if overflow := percentage > 100; overflow {
 		b.stop()
@@ -86,15 +86,15 @@ func (b *Bar) clear() {
 }
 
 func (b *Bar) print(w io.Writer) {
-	cols := int(atomic.LoadInt64(&b.termCols))
+	cols := int(atomic.LoadInt64(&b.cols))
 	chars := map[bool]int{true: cols - b.layout}[cols >= b.layout]
 	repeat := (chars * b.percentage()) / 100
-	count := int(atomic.LoadInt64(&b.stepsCount))
+	count := int(atomic.LoadInt64(&b.acount))
 
 	fmt.Fprintf(
 		w, "%3d%% [%s%s] %*d/%*d", b.percentage(),
 		strings.Repeat("#", repeat), strings.Repeat(".", chars-repeat),
-		b.length, count, b.length, b.stepsTotal,
+		b.length, count, b.length, b.total,
 	)
 }
 
@@ -135,7 +135,7 @@ func (b *Bar) Step(count int) {
 		select {
 		case b.check <- count:
 		default:
-			log.Println("missing step", atomic.LoadInt64(&b.stepsCount))
+			log.Println("missing step", atomic.LoadInt64(&b.acount))
 		}
 	}
 }
@@ -161,11 +161,11 @@ func (b *Bar) Render() context.CancelFunc {
 				b.clear()
 				b.stop()
 			case count := <-b.check:
-				atomic.AddInt64(&b.stepsCount, int64(count))
-				stepsCount := atomic.LoadInt64(&b.stepsCount)
+				atomic.AddInt64(&b.acount, int64(count))
+				stepsCount := atomic.LoadInt64(&b.acount)
 
 				b.display()
-				if finished := stepsCount >= b.stepsTotal; finished {
+				if finished := stepsCount >= b.total; finished {
 					b.clear()
 					b.stop()
 				}
