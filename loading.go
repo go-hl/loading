@@ -33,13 +33,14 @@ type Bar struct {
 
 	length int
 	layout int
+	since  time.Time
 }
 
 // NewBar creates a new [Bar].
 func NewBar(steps int64) *Bar {
 	length := len(strconv.Itoa(int(steps)))
 	marker := strings.Repeat("0", length)
-	layout := len(fmt.Sprintf("000%% [] %s/%s", marker, marker))
+	layout := len(fmt.Sprintf("%s/%s 00:00:00 [] 000%%", marker, marker))
 
 	return &Bar{
 		total:  steps,
@@ -48,7 +49,16 @@ func NewBar(steps int64) *Bar {
 		out:    os.Stdout,
 		length: length,
 		layout: layout,
+		since:  time.Now(),
 	}
+}
+
+func (b *Bar) time() string {
+	since := time.Since(b.since)
+	hour := int(since.Hours())
+	minute := int(since.Minutes()) % 60
+	second := int(since.Seconds()) % 60
+	return fmt.Sprintf("%02d:%02d:%02d", hour, minute, second)
 }
 
 func (b *Bar) termSizeUpdate() {
@@ -92,9 +102,10 @@ func (b *Bar) print(w io.Writer) {
 	count := int(atomic.LoadInt64(&b.acount))
 
 	fmt.Fprintf(
-		w, "%3d%% [%s%s] %*d/%*d", b.percentage(),
+		w, "%*d/%*d %s [%s%s] %3d%%",
+		b.length, count, b.length, b.total, b.time(),
 		strings.Repeat("#", repeat), strings.Repeat(".", chars-repeat),
-		b.length, count, b.length, b.total,
+		b.percentage(),
 	)
 }
 
