@@ -2,6 +2,7 @@ package loading
 
 import (
 	"fmt"
+	"io"
 	"sync/atomic"
 )
 
@@ -10,30 +11,18 @@ const (
 	ansiCSI = ansiESC + "["
 )
 
-func ansiNewLine() {
-	fmt.Print("\n") // create new line
+func ansiCursorEnd(w io.Writer, b *Bar) {
+	fmt.Fprintf(w, ansiCSI+"%d;H", atomic.LoadInt64(&b.termRows)) // move cursor to down
 }
 
-func ansiCursorUp() {
-	fmt.Print(ansiCSI + "A") // move cursor up
+func ansiCursorSave(w io.Writer) {
+	fmt.Fprint(w, ansiESC+"7") // save current cursor position
 }
 
-func ansiCursorEnd(b *Bar) {
-	fmt.Printf(ansiCSI+"%d;H", atomic.LoadInt64(&b.termRows)) // move cursor to down
+func ansiCursorRestore(w io.Writer) {
+	fmt.Fprint(w, ansiESC+"8") // restore cursor to saved position
 }
 
-func ansiCursorSave() {
-	fmt.Print(ansiESC + "7") // save current cursor position
-}
-
-func ansiCursorRestore() {
-	fmt.Print(ansiESC + "8") // restore cursor to saved position
-}
-
-func ansiClearLine() {
-	fmt.Print(ansiCSI + "2K") // clear cursor current line
-}
-
-func ansiClearNexts() {
-	fmt.Print(ansiCSI + "J") // clear from cursor all next lines
+func ansiClearLine(w io.Writer) {
+	fmt.Fprint(w, ansiCSI+"2K") // clear cursor current line
 }

@@ -1,12 +1,15 @@
 package loading
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -24,14 +27,27 @@ type Bar struct {
 	quit  atomic.Bool
 	check chan int
 	done  chan struct{}
+
+	mu  sync.Mutex
+	out io.Writer
+
+	length int
+	layout int
 }
 
 // NewBar creates a new [Bar].
 func NewBar(steps int64) *Bar {
+	length := len(strconv.Itoa(int(steps)))
+	marker := strings.Repeat("0", length)
+	layout := len(fmt.Sprintf("000%% [] %s/%s", marker, marker))
+
 	return &Bar{
 		stepsTotal: steps,
 		check:      make(chan int, steps),
 		done:       make(chan struct{}, 1),
+		out:        os.Stdout,
+		length:     length,
+		layout:     layout,
 	}
 }
 
@@ -51,59 +67,64 @@ func (b *Bar) termSizeUpdate() {
 func (b *Bar) percentage() int {
 	count := int(atomic.LoadInt64(&b.stepsCount))
 	percentage := (count * 100) / int(b.stepsTotal)
-	overflow := percentage > 100
 
-	if overflow {
+	if overflow := percentage > 100; overflow {
 		b.stop()
 		return 100
 	}
-
 	return percentage
 }
 
-func (b *Bar) print() {
-	count := int(atomic.LoadInt64(&b.stepsCount))
-	length := len(strconv.Itoa(int(b.stepsTotal)))
-	marker := strings.Repeat("0", length)
-	layout := len(fmt.Sprintf("[] %s/%s 000%%", marker, marker))
+func (b *Bar) clear() {
+	time.Sleep(time.Second)
 
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	ansiCursorEnd(b.out, b)
+	ansiClearLine(b.out)
+}
+
+func (b *Bar) print(w io.Writer) {
 	cols := int(atomic.LoadInt64(&b.termCols))
-	chars := map[bool]int{true: cols - layout}[cols >= layout]
+	chars := map[bool]int{true: cols - b.layout}[cols >= b.layout]
 	repeat := (chars * b.percentage()) / 100
+	count := int(atomic.LoadInt64(&b.stepsCount))
 
-	fmt.Printf(
-		"[%s%s] %*d/%*d %3d%%",
+	fmt.Fprintf(
+		w, "%3d%% [%s%s] %*d/%*d", b.percentage(),
 		strings.Repeat("#", repeat), strings.Repeat(".", chars-repeat),
-		length, count, length, b.stepsTotal, b.percentage(),
+		b.length, count, b.length, b.stepsTotal,
 	)
 }
 
-func (*Bar) clear() {
-	time.Sleep(time.Second)
-	ansiClearNexts()
+func (b *Bar) draw(w io.Writer) {
+	var buf bytes.Buffer
+
+	b.termSizeUpdate()
+	ansiCursorSave(&buf)
+	ansiCursorEnd(&buf, b)
+	ansiClearLine(&buf)
+	b.print(&buf)
+	ansiCursorRestore(&buf)
+
+	_, err := w.Write(buf.Bytes())
+	if err != nil {
+		log.Println("not rendering:", err)
+	}
 }
 
-func (b *Bar) draw() {
-	b.termSizeUpdate()
-
-	ansiNewLine()
-	ansiCursorUp()
-
-	ansiCursorSave()
-	ansiClearNexts()
-
-	ansiCursorEnd(b)
-	ansiClearLine()
-	b.print()
-
-	ansiCursorRestore()
+func (b *Bar) display() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.draw(b.out)
 }
 
 func (b *Bar) stop() {
 	b.quit.Store(true)
 }
 
-// Done simples call this after call [Bar.Render] to wait [Bar] completion.
+// Done must be called after call [Bar.Render] to wait [Bar] completion.
 func (b *Bar) Done() {
 	<-b.done
 }
@@ -125,7 +146,7 @@ func (b *Bar) Step(count int) {
 func (b *Bar) Render() context.CancelFunc {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	b.draw()
+	b.display()
 	go func() {
 		for {
 			if b.quit.Load() {
@@ -141,12 +162,10 @@ func (b *Bar) Render() context.CancelFunc {
 				b.stop()
 			case count := <-b.check:
 				atomic.AddInt64(&b.stepsCount, int64(count))
-
 				stepsCount := atomic.LoadInt64(&b.stepsCount)
-				finished := stepsCount >= b.stepsTotal
 
-				b.draw()
-				if finished {
+				b.display()
+				if finished := stepsCount >= b.stepsTotal; finished {
 					b.clear()
 					b.stop()
 				}
@@ -155,4 +174,14 @@ func (b *Bar) Render() context.CancelFunc {
 	}()
 
 	return cancel
+}
+
+// Writer returns an [io.Writer] synchronized with the bar to use with
+// other print methods like [fmt.Fprint] (and your variants) or [log.New].
+// Every write will erase the bar, print the content, then redraw the bar,
+// keeping the bar pinned to the last line at all times.
+func (b *Bar) Writer() io.Writer {
+	return &writer{
+		bar: b,
+	}
 }
