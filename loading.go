@@ -12,8 +12,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/term"
 )
 
 // Bar represents a progress bar.
@@ -21,8 +19,8 @@ type Bar struct {
 	total  int64
 	acount int64
 
-	cols int64
 	rows int64
+	cols int64
 
 	quit  atomic.Bool
 	check chan int
@@ -62,16 +60,9 @@ func (b *Bar) time() string {
 }
 
 func (b *Bar) termSizeUpdate() {
-	fileDescriptor := int(os.Stdin.Fd())
-	cols, rows, err := term.GetSize(fileDescriptor)
-	if err != nil {
-		atomic.SwapInt64(&b.cols, 0)
-		atomic.SwapInt64(&b.rows, 0)
-		return
-	}
-
-	atomic.SwapInt64(&b.cols, int64(cols))
+	rows, cols := getWinSize()
 	atomic.SwapInt64(&b.rows, int64(rows))
+	atomic.SwapInt64(&b.cols, int64(cols))
 }
 
 func (b *Bar) percentage() int {
@@ -91,10 +82,17 @@ func (b *Bar) clear() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	ansiCursorSave(b.out)
-	ansiCursorEnd(b.out, b)
-	ansiClearLine(b.out)
-	ansiCursorRestore(b.out)
+	var buf bytes.Buffer
+
+	ansiCursorSave(&buf)
+	ansiCursorEnd(&buf, b)
+	ansiClearLine(&buf)
+	ansiCursorRestore(&buf)
+
+	_, err := b.out.Write(buf.Bytes())
+	if err != nil {
+		log.Println("not rendering:", err)
+	}
 }
 
 func (b *Bar) print(w io.Writer) {
