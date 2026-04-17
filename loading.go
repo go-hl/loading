@@ -51,7 +51,7 @@ func NewBar(steps int64) *Bar {
 	}
 }
 
-func (b *Bar) time() string {
+func (b *Bar) timeElapsed() string {
 	since := time.Since(b.since)
 	hour := int(since.Hours())
 	minute := int(since.Minutes()) % 60
@@ -59,13 +59,13 @@ func (b *Bar) time() string {
 	return fmt.Sprintf("%02d:%02d:%02d", hour, minute, second)
 }
 
-func (b *Bar) termSizeUpdate() {
+func (b *Bar) updateTermSize() {
 	rows, cols := getWinSize()
 	atomic.SwapInt64(&b.rows, int64(rows))
 	atomic.SwapInt64(&b.cols, int64(cols))
 }
 
-func (b *Bar) percentage() int {
+func (b *Bar) percentProgress() int {
 	count := int(atomic.LoadInt64(&b.acount))
 	percentage := (count * 100) / int(b.total)
 
@@ -98,21 +98,21 @@ func (b *Bar) clear() {
 func (b *Bar) print(w io.Writer) {
 	cols := int(atomic.LoadInt64(&b.cols))
 	chars := map[bool]int{true: cols - b.layout}[cols >= b.layout]
-	repeat := (chars * b.percentage()) / 100
+	repeat := (chars * b.percentProgress()) / 100
 	count := int(atomic.LoadInt64(&b.acount))
 
 	fmt.Fprintf(
 		w, "%*d/%*d %s [%s%s] %3d%%",
-		b.length, count, b.length, b.total, b.time(),
+		b.length, count, b.length, b.total, b.timeElapsed(),
 		strings.Repeat("#", repeat), strings.Repeat(".", chars-repeat),
-		b.percentage(),
+		b.percentProgress(),
 	)
 }
 
 func (b *Bar) draw(w io.Writer) {
 	var buf bytes.Buffer
 
-	b.termSizeUpdate()
+	b.updateTermSize()
 	ansiCursorSave(&buf)
 	ansiCursorEnd(&buf, b)
 	ansiClearLine(&buf)
