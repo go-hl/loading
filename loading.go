@@ -135,19 +135,13 @@ func (b *Bar) stop() {
 	b.quit.Store(true)
 }
 
-// Done must be called after call [Bar.Render] to wait [Bar] completion.
-func (b *Bar) Done() {
-	<-b.done
-}
-
-// Step receives the count of steps to progress, one or more per time.
-func (b *Bar) Step(count int) {
-	if !b.quit.Load() {
-		select {
-		case b.check <- count:
-		default:
-			log.Println("missing step", atomic.LoadInt64(&b.acount))
-		}
+// Writer returns an [io.Writer] synchronized with the bar to use with
+// other print methods like [fmt.Fprint] (and your variants) or [log.New].
+// Every write will erase the bar, print the content, then redraw the bar,
+// keeping the bar pinned to the last line at all times.
+func (b *Bar) Writer() io.Writer {
+	return &writer{
+		bar: b,
 	}
 }
 
@@ -187,12 +181,18 @@ func (b *Bar) Render() context.CancelFunc {
 	return cancel
 }
 
-// Writer returns an [io.Writer] synchronized with the bar to use with
-// other print methods like [fmt.Fprint] (and your variants) or [log.New].
-// Every write will erase the bar, print the content, then redraw the bar,
-// keeping the bar pinned to the last line at all times.
-func (b *Bar) Writer() io.Writer {
-	return &writer{
-		bar: b,
+// Step receives the count of steps to progress, one or more per time.
+func (b *Bar) Step(count int) {
+	if !b.quit.Load() {
+		select {
+		case b.check <- count:
+		default:
+			log.Println("missing step", atomic.LoadInt64(&b.acount))
+		}
 	}
+}
+
+// Done must be called after call [Bar.Render] to wait [Bar] completion.
+func (b *Bar) Done() {
+	<-b.done
 }
