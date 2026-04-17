@@ -143,6 +143,16 @@ func (b *Bar) stop() {
 	b.quit.Store(true)
 }
 
+func (b *Bar) step(count int) {
+	if !b.quit.Load() {
+		select {
+		case b.check <- count:
+		default:
+			log.Println("missing step", atomic.LoadInt64(&b.acount))
+		}
+	}
+}
+
 // Writer returns an [io.Writer] synchronized with the bar to use with
 // other print methods like [fmt.Fprint] (and your variants) or [log.New].
 // Every write will erase the bar, print the content, then redraw the bar,
@@ -219,14 +229,13 @@ func (b *Bar) Render() context.CancelFunc {
 }
 
 // Step receives the count of steps to progress, one or more per time.
-func (b *Bar) Step(count int) {
-	if !b.quit.Load() {
-		select {
-		case b.check <- count:
-		default:
-			log.Println("missing step", atomic.LoadInt64(&b.acount))
-		}
-	}
+func (b *Bar) Step() {
+	b.step(1)
+}
+
+// Steps receives the count of steps to progress, one or more per time.
+func (b *Bar) Steps(count int) {
+	b.step(count)
 }
 
 // Done must be called after call [Bar.Render] to wait [Bar] completion.
