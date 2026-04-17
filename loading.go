@@ -59,14 +59,6 @@ func NewBarWithSteps(steps int64) *Bar {
 	}
 }
 
-func (b *Bar) timeElapsed() string {
-	since := time.Since(b.since)
-	hour := int(since.Hours())
-	minute := int(since.Minutes()) % 60
-	second := int(since.Seconds()) % 60
-	return fmt.Sprintf("%02d:%02d:%02d", hour, minute, second)
-}
-
 func (b *Bar) updateTermSize() {
 	rows, cols := termGetSize()
 	atomic.SwapInt64(&b.rows, int64(rows))
@@ -84,20 +76,31 @@ func (b *Bar) percentProgress() int {
 	return percentage
 }
 
-func (b *Bar) clear() {
-	time.Sleep(time.Second)
+func (b *Bar) timeElapsed() string {
+	since := time.Since(b.since)
+	hour := int(since.Hours())
+	minute := int(since.Minutes()) % 60
+	second := int(since.Seconds()) % 60
+	return fmt.Sprintf("%02d:%02d:%02d", hour, minute, second)
+}
 
+func (b *Bar) display() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	b.draw(b.out)
+}
 
+func (b *Bar) draw(w io.Writer) {
 	var buf bytes.Buffer
 
+	b.updateTermSize()
 	ansiCursorSave(&buf)
 	ansiCursorEnd(&buf, b)
 	ansiClearLine(&buf)
+	b.print(&buf)
 	ansiCursorRestore(&buf)
 
-	_, err := b.out.Write(buf.Bytes())
+	_, err := w.Write(buf.Bytes())
 	if err != nil {
 		log.Println("not rendering:", err)
 	}
@@ -117,26 +120,23 @@ func (b *Bar) print(w io.Writer) {
 	)
 }
 
-func (b *Bar) draw(w io.Writer) {
+func (b *Bar) clear() {
+	time.Sleep(time.Second)
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	var buf bytes.Buffer
 
-	b.updateTermSize()
 	ansiCursorSave(&buf)
 	ansiCursorEnd(&buf, b)
 	ansiClearLine(&buf)
-	b.print(&buf)
 	ansiCursorRestore(&buf)
 
-	_, err := w.Write(buf.Bytes())
+	_, err := b.out.Write(buf.Bytes())
 	if err != nil {
 		log.Println("not rendering:", err)
 	}
-}
-
-func (b *Bar) display() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.draw(b.out)
 }
 
 func (b *Bar) stop() {
