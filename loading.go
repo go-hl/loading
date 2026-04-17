@@ -34,8 +34,16 @@ type Bar struct {
 	since  time.Time
 }
 
-// NewBar creates a new [Bar].
-func NewBar(steps int64) *Bar {
+// NewBar creates a new [Bar] without count of steps set.
+// If this method is used then is necessary call [Bar.Set] before [Bar.Render].
+func NewBar() *Bar {
+	return &Bar{
+		out: os.Stdout,
+	}
+}
+
+// NewBarWithSteps creates a new [Bar] with the count of steps.
+func NewBarWithSteps(steps int64) *Bar {
 	length := len(strconv.Itoa(int(steps)))
 	marker := strings.Repeat("0", length)
 	layout := len(fmt.Sprintf("%s/%s 00:00:00 [] 000%%", marker, marker))
@@ -143,6 +151,24 @@ func (b *Bar) Writer() io.Writer {
 	return &writer{
 		bar: b,
 	}
+}
+
+// Set set or reset the bar attributes.
+// Necessary if creates a new bar with [NewBar] or if want reset it stats.
+func (b *Bar) Set(steps int64) {
+	length := len(strconv.Itoa(int(steps)))
+	marker := strings.Repeat("0", length)
+	layout := len(fmt.Sprintf("%s/%s 00:00:00 [] 000%%", marker, marker))
+
+	b.acount = 0
+	b.quit = atomic.Bool{}
+
+	b.total = steps
+	b.check = make(chan int, steps)
+	b.done = make(chan struct{}, 1)
+	b.length = length
+	b.layout = layout
+	b.since = time.Now()
 }
 
 // Render stats the progress bar showing.
