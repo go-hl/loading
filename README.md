@@ -17,17 +17,21 @@ import (
 const count = 1000
 
 func main() {
-	bar := loading.NewBar(count)
+	bar := loading.NewBar()
+	bar.Set(count)
 	writer := bar.Writer()
 
-	bar.Render()
-	for index := range count {
-		fast(writer, index)
-		bar.Step(1)
-	}
-	bar.Done()
+	for range 2 {
+		bar.Render()
+		for index := range count {
+			fast(writer, index)
+			bar.Step()
+		}
+		bar.Done()
 
-	fmt.Println("hello world")
+		fmt.Println("hello world")
+		bar.Reset()
+	}
 }
 ```
 
@@ -45,7 +49,7 @@ import (
 const count = 1000
 
 func main() {
-	bar := loading.NewBar(count)
+	bar := loading.NewBarSteps(count)
 	writer := bar.Writer()
 
 	bar.Render()
@@ -55,7 +59,7 @@ func main() {
 		go func() {
 			defer wg.Done()
 			slow(writer, index)
-			bar.Step(1)
+			bar.Steps(1)
 		}()
 	}
 	wg.Wait()
@@ -80,7 +84,7 @@ const count = 1000
 
 func main() {
 	data := make(chan int, count)
-	bar := loading.NewBar(count)
+	bar := loading.NewBarSteps(count)
 	writer := bar.Writer()
 
 	bar.Render()
@@ -91,7 +95,7 @@ func main() {
 			defer wg.Done()
 			for index := range data {
 				slow(writer, index)
-				bar.Step(1)
+				bar.Steps(1)
 			}
 		}()
 	}
