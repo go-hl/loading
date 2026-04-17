@@ -42,8 +42,8 @@ func NewBar() *Bar {
 	}
 }
 
-// NewBarWithSteps creates a new [Bar] with the count of steps.
-func NewBarWithSteps(steps int64) *Bar {
+// NewBarSteps creates a new [Bar] with the count of steps.
+func NewBarSteps(steps int64) *Bar {
 	length := len(strconv.Itoa(int(steps)))
 	marker := strings.Repeat("0", length)
 	layout := len(fmt.Sprintf("%s/%s 00:00:00 [] 000%%", marker, marker))
