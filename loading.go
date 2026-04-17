@@ -198,11 +198,15 @@ func (b *Bar) Reset() {
 func (b *Bar) Render() context.CancelFunc {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	const tick = time.Second
+	ticker := time.NewTicker(tick)
+
 	b.display()
 	go func() {
 		for {
 			if b.quit.Load() {
 				b.done <- struct{}{}
+				ticker.Stop()
 				close(b.check)
 				close(b.done)
 				return
@@ -221,6 +225,11 @@ func (b *Bar) Render() context.CancelFunc {
 					b.clear()
 					b.stop()
 				}
+
+				ticker.Reset(tick)
+			case <-ticker.C:
+				b.display()
+				ticker.Reset(tick)
 			}
 		}
 	}()
@@ -238,7 +247,7 @@ func (b *Bar) Steps(count int) {
 	b.step(count)
 }
 
-// Done must be called after call [Bar.Render] to wait [Bar] completion.
+// Done must be called after [Bar.Render] to wait [Bar] completion.
 func (b *Bar) Done() {
 	<-b.done
 }
