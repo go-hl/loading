@@ -171,6 +171,17 @@ func (b *Bar) Set(steps int64) {
 	b.since = time.Now()
 }
 
+// Reset the bar attributes stats reusing the atual total of count steps.
+// Use to restart the bar.
+func (b *Bar) Reset() {
+	b.acount = 0
+	b.quit = atomic.Bool{}
+
+	b.check = make(chan int, b.total)
+	b.done = make(chan struct{}, 1)
+	b.since = time.Now()
+}
+
 // Render stats the progress bar showing.
 // It is finishd when the count of steps the greater than or equal the total.
 // Also can fast cancel with cancel function return value.
