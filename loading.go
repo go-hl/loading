@@ -228,7 +228,7 @@ func (b *Bar) Render() context.CancelFunc {
 	return cancel
 }
 
-// Step receives the count of steps to progress, one or more per time.
+// Step counts one steps to progress.
 func (b *Bar) Step() {
 	b.step(1)
 }
