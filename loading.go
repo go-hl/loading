@@ -60,7 +60,7 @@ func (b *Bar) timeElapsed() string {
 }
 
 func (b *Bar) updateTermSize() {
-	rows, cols := getWinSize()
+	rows, cols := termGetSize()
 	atomic.SwapInt64(&b.rows, int64(rows))
 	atomic.SwapInt64(&b.cols, int64(cols))
 }

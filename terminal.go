@@ -10,7 +10,7 @@ type winSize struct {
 	cols uint16
 }
 
-func getWinSize() (int, int) {
+func termGetSize() (int, int) {
 	var ws winSize
 	syscall.Syscall(
 		syscall.SYS_IOCTL,
